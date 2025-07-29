@@ -135,3 +135,20 @@ function setTodayDate() {
 // Initialize
 setTodayDate();
 renderEntries();
+// DARK MODE TOGGLE
+const toggleBtn = document.getElementById("theme-toggle");
+
+function applyTheme(theme) {
+  document.body.classList.toggle("dark", theme === "dark");
+  localStorage.setItem("theme", theme);
+}
+
+toggleBtn.addEventListener("click", () => {
+  const currentTheme = document.body.classList.contains("dark") ? "dark" : "light";
+  const newTheme = currentTheme === "dark" ? "light" : "dark";
+  applyTheme(newTheme);
+});
+
+// Load saved theme
+const savedTheme = localStorage.getItem("theme") || "light";
+applyTheme(savedTheme);
