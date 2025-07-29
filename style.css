@@ -205,3 +205,46 @@ form button[type="submit"]:hover {
     margin-left: 5px;
   }
 }
+:root {
+  --bg: #ffffff;
+  --text: #333333;
+  --card: #ffffff;
+  --accent: #2c3e50;
+  --button: #2980b9;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+main {
+  background: var(--card);
+}
+
+thead th {
+  background-color: var(--accent);
+}
+
+/* Dark Mode */
+body.dark {
+  --bg: #1e1e2f;
+  --text: #e1e1e1;
+  --card: #2c2c3c;
+  --accent: #3a3a5a;
+  --button: #3c8dbc;
+}
+
+/* Theme toggle button */
+#theme-toggle {
+  position: absolute;
+  top: 20px;
+  right: 30px;
+  background-color: var(--button);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
