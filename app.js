@@ -1,5 +1,3 @@
-// Job Hours Tracker app.js
-
 const entryForm = document.getElementById('entryForm');
 const dateInput = document.getElementById('date');
 const checkInInput = document.getElementById('checkIn');
@@ -29,7 +27,7 @@ function calculateTotalHours(checkIn, checkOut, breakTime) {
   const checkOutMins = parseTimeToMinutes(checkOut);
   const breakMins = parseTimeToMinutes(breakTime);
   let total = checkOutMins - checkInMins - breakMins;
-  if(total < 0) total = 0;
+  if (total < 0) total = 0;
   return total;
 }
 
@@ -38,14 +36,14 @@ function renderEntries() {
   entries.forEach((entry, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td data-label="Date">${entry.date}</td>
-      <td data-label="Check-in">${entry.checkIn}</td>
-      <td data-label="Check-out">${entry.checkOut}</td>
-      <td data-label="Break">${entry.breakTime}</td>
-      <td data-label="Total Hours">${formatMinutesToHours(entry.totalMinutes)}</td>
-      <td data-label="Actions">
-        <button class="edit-btn" aria-label="Edit entry on ${entry.date}" data-index="${i}">✏️</button>
-        <button class="delete-btn" aria-label="Delete entry on ${entry.date}" data-index="${i}">🗑️</button>
+      <td>${entry.date}</td>
+      <td>${entry.checkIn}</td>
+      <td>${entry.checkOut}</td>
+      <td>${entry.breakTime}</td>
+      <td>${formatMinutesToHours(entry.totalMinutes)}</td>
+      <td>
+        <button class="edit-btn" data-index="${i}">✏️</button>
+        <button class="delete-btn" data-index="${i}">🗑️</button>
       </td>
     `;
     entriesTableBody.appendChild(tr);
@@ -54,14 +52,67 @@ function renderEntries() {
 }
 
 function renderMonthlyTotal() {
-  if(entries.length === 0){
-    monthlyTotalEl.textContent = 'Total hours this month: 0';
-    return;
-  }
   const now = new Date();
   const thisMonth = now.getMonth();
   const thisYear = now.getFullYear();
+
   const totalMins = entries.reduce((acc, entry) => {
     const [year, month] = entry.date.split('-').map(Number);
-    if(year === thisYear && month === thisMonth + 1) {
-      return acc + entry
+    if (year === thisYear && month === thisMonth + 1) {
+      return acc + entry.totalMinutes;
+    }
+    return acc;
+  }, 0);
+
+  monthlyTotalEl.textContent = `Total hours this month: ${formatMinutesToHours(totalMins)}`;
+}
+
+entryForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+
+  const date = dateInput.value;
+  const checkIn = checkInInput.value;
+  const checkOut = checkOutInput.value;
+  const breakTime = breakInput.value || '00:00';
+
+  if (!date || !checkIn || !checkOut) {
+    alert("Please fill in all required fields.");
+    return;
+  }
+
+  const totalMinutes = calculateTotalHours(checkIn, checkOut, breakTime);
+
+  const entry = { date, checkIn, checkOut, breakTime, totalMinutes };
+
+  if (editingIndex !== null) {
+    entries[editingIndex] = entry;
+    editingIndex = null;
+  } else {
+    entries.push(entry);
+  }
+
+  localStorage.setItem('jobEntries', JSON.stringify(entries));
+  entryForm.reset();
+  renderEntries();
+});
+
+entriesTableBody.addEventListener('click', (e) => {
+  const index = e.target.dataset.index;
+  if (e.target.classList.contains('edit-btn')) {
+    const entry = entries[index];
+    dateInput.value = entry.date;
+    checkInInput.value = entry.checkIn;
+    checkOutInput.value = entry.checkOut;
+    breakInput.value = entry.breakTime;
+    editingIndex = index;
+  } else if (e.target.classList.contains('delete-btn')) {
+    if (confirm("Delete this entry?")) {
+      entries.splice(index, 1);
+      localStorage.setItem('jobEntries', JSON.stringify(entries));
+      renderEntries();
+    }
+  }
+});
+
+// Initial render
+renderEntries();
