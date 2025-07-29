@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Job Hours Tracker</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="stylesheet" href="style.css" />
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('service-worker.js')
+  .then(() => console.log('Service Worker registered'))
+  .catch(() => console.log('Service Worker registration failed'));
+}
+</script>
+</head>
+<body>
+<header>
+  <h1>Job Hours Tracker</h1>
+  <button id="themeToggle" aria-label="Toggle light/dark theme">🌙</button>
+</header>
+
+<form id="entryForm" aria-label="Add or edit job time entry">
+  <input type="date" id="date" required aria-required="true" />
+  <input type="time" id="checkIn" required aria-required="true" aria-label="Check-in time" />
+  <input type="time" id="checkOut" required aria-required="true" aria-label="Check-out time" />
+  <input type="time" id="breakTime" value="00:00" aria-label="Break duration" />
+  <button type="submit">Add / Update</button>
+</form>
+
+<table aria-label="Job time entries">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Check-in</th>
+      <th>Check-out</th>
+      <th>Break</th>
+      <th>Total Hours</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody id="entriesTableBody"></tbody>
+</table>
+
+<section id="summary" aria-live="polite" aria-atomic="true">
+  <h2>Monthly Summary</h2>
+  <p id="monthlyTotal">Total hours this month: 0</p>
+</section>
+
+<button id="exportPdfBtn">Export as PDF</button>
+
+<script src="app.js"></script>
+</body>
+</html>
