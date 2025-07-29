@@ -1,132 +1,144 @@
-const entryForm = document.getElementById('entryForm');
-const dateInput = document.getElementById('date');
-const checkInInput = document.getElementById('checkIn');
-const checkOutInput = document.getElementById('checkOut');
-const breakInput = document.getElementById('breakTime');
-const entriesTableBody = document.getElementById('entriesTableBody');
-const monthlyTotalEl = document.getElementById('monthlyTotal');
-const exportPdfBtn = document.getElementById('exportPdfBtn');
-const themeToggleBtn = document.getElementById('themeToggle');
+// Select elements
+const form = document.getElementById("entry-form");
+const dateInput = document.getElementById("date-input");
+const checkin1Input = document.getElementById("checkin1-input");
+const checkout1Input = document.getElementById("checkout1-input");
+const checkin2Input = document.getElementById("checkin2-input");
+const checkout2Input = document.getElementById("checkout2-input");
+const entriesTableBody = document.getElementById("entries-table-body");
+const monthlyTotalDisplay = document.getElementById("monthly-total");
 
-let entries = JSON.parse(localStorage.getItem('jobEntries') || '[]');
-let editingIndex = null;
+let entries = [];
 
-function parseTimeToMinutes(timeStr) {
-  const [h, m] = timeStr.split(':').map(Number);
-  return h * 60 + m;
+// Initialize form date input to today
+function setTodayDate() {
+  const today = new Date().toISOString().slice(0, 10);
+  dateInput.value = today;
 }
 
-function formatMinutesToHours(mins) {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
+// Calculate difference in minutes between two time strings "HH:MM"
+function timeDiffInMinutes(start, end) {
+  if (!start || !end) return 0;
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  let startMinutes = sh * 60 + sm;
+  let endMinutes = eh * 60 + em;
+  // Handle if end is before start (assume next day)
+  if (endMinutes < startMinutes) endMinutes += 24 * 60;
+  return Math.max(0, endMinutes - startMinutes);
+}
+
+// Format minutes to "Xh Ym"
+function formatMinutes(totalMinutes) {
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
   return `${h}h ${m}m`;
 }
 
-function calculateTotalHours(checkIn, checkOut, breakTime) {
-  const checkInMins = parseTimeToMinutes(checkIn);
-  const checkOutMins = parseTimeToMinutes(checkOut);
-  const breakMins = parseTimeToMinutes(breakTime);
-  let total = checkOutMins - checkInMins - breakMins;
-  if (total < 0) total = 0;
-  return total;
+// Calculate total hours from two check-in/out pairs
+function calculateTotalHours(entry) {
+  const session1 = timeDiffInMinutes(entry.checkin1, entry.checkout1);
+  const session2 = timeDiffInMinutes(entry.checkin2, entry.checkout2);
+  return session1 + session2;
 }
 
+// Render entries in the table
 function renderEntries() {
-  entriesTableBody.innerHTML = '';
-  entries.forEach((entry, i) => {
-    const tr = document.createElement('tr');
+  entriesTableBody.innerHTML = "";
+  entries.forEach((entry, index) => {
+    const totalMinutes = calculateTotalHours(entry);
+    const totalFormatted = formatMinutes(totalMinutes);
+
+    const tr = document.createElement("tr");
+
     tr.innerHTML = `
       <td>${entry.date}</td>
-      <td>${entry.checkIn}</td>
-      <td>${entry.checkOut}</td>
-      <td>${entry.breakTime}</td>
-      <td>${formatMinutesToHours(entry.totalMinutes)}</td>
+      <td>${entry.checkin1 || ""}</td>
+      <td>${entry.checkout1 || ""}</td>
+      <td>${entry.checkin2 || ""}</td>
+      <td>${entry.checkout2 || ""}</td>
+      <td>${totalFormatted}</td>
       <td>
-        <button class="edit-btn" data-index="${i}">✏️</button>
-        <button class="delete-btn" data-index="${i}">🗑️</button>
+        <button class="edit-btn" data-index="${index}">✏️</button>
+        <button class="delete-btn" data-index="${index}">🗑️</button>
       </td>
     `;
+
     entriesTableBody.appendChild(tr);
   });
-  renderMonthlyTotal();
+
+  updateMonthlyTotal();
 }
 
-function renderMonthlyTotal() {
-  const now = new Date();
-  const thisMonth = now.getMonth();
-  const thisYear = now.getFullYear();
+// Update the total hours for current month
+function updateMonthlyTotal() {
+  const thisMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+  let totalMins = 0;
 
-  const totalMins = entries.reduce((acc, entry) => {
-    const [year, month] = entry.date.split('-').map(Number);
-    if (year === thisYear && month === thisMonth + 1) {
-      return acc + entry.totalMinutes;
+  entries.forEach((entry) => {
+    if (entry.date.startsWith(thisMonth)) {
+      totalMins += calculateTotalHours(entry);
     }
-    return acc;
-  }, 0);
+  });
 
-  monthlyTotalEl.textContent = `Total hours this month: ${formatMinutesToHours(totalMins)}`;
+  monthlyTotalDisplay.textContent = formatMinutes(totalMins);
 }
 
-entryForm.addEventListener('submit', (e) => {
+// Clear form inputs (except date, keep it today)
+function clearForm() {
+  checkin1Input.value = "";
+  checkout1Input.value = "";
+  checkin2Input.value = "";
+  checkout2Input.value = "";
+}
+
+// Add new entry from form
+form.addEventListener("submit", (e) => {
   e.preventDefault();
 
-  const date = dateInput.value;
-  const checkIn = checkInInput.value;
-  const checkOut = checkOutInput.value;
-  const breakTime = breakInput.value || '00:00';
-
-  if (!date || !checkIn || !checkOut) {
-    alert("Please fill in all required fields.");
+  // Validate required fields
+  if (!dateInput.value || !checkin1Input.value || !checkout1Input.value) {
+    alert("Please fill date, first check-in and check-out times.");
     return;
   }
 
-  const totalMinutes = calculateTotalHours(checkIn, checkOut, breakTime);
+  const newEntry = {
+    date: dateInput.value,
+    checkin1: checkin1Input.value,
+    checkout1: checkout1Input.value,
+    checkin2: checkin2Input.value || "",
+    checkout2: checkout2Input.value || "",
+  };
 
-  const entry = { date, checkIn, checkOut, breakTime, totalMinutes };
-
-  if (editingIndex !== null) {
-    entries[editingIndex] = entry;
-    editingIndex = null;
-  } else {
-    entries.push(entry);
-  }
-
-  localStorage.setItem('jobEntries', JSON.stringify(entries));
-  entryForm.reset();
+  entries.push(newEntry);
   renderEntries();
+  clearForm();
 });
 
-entriesTableBody.addEventListener('click', (e) => {
-  const index = e.target.dataset.index;
-  if (e.target.classList.contains('edit-btn')) {
+// Handle edit and delete clicks
+entriesTableBody.addEventListener("click", (e) => {
+  if (e.target.classList.contains("edit-btn")) {
+    const index = e.target.dataset.index;
     const entry = entries[index];
+
+    // Fill form with existing entry data for editing
     dateInput.value = entry.date;
-    checkInInput.value = entry.checkIn;
-    checkOutInput.value = entry.checkOut;
-    breakInput.value = entry.breakTime;
-    editingIndex = index;
-  } else if (e.target.classList.contains('delete-btn')) {
-    if (confirm("Delete this entry?")) {
-      entries.splice(index, 1);
-      localStorage.setItem('jobEntries', JSON.stringify(entries));
-      renderEntries();
-    }
+    checkin1Input.value = entry.checkin1;
+    checkout1Input.value = entry.checkout1;
+    checkin2Input.value = entry.checkin2;
+    checkout2Input.value = entry.checkout2;
+
+    // Remove the entry from array to update on submit
+    entries.splice(index, 1);
+    renderEntries();
+
+  } else if (e.target.classList.contains("delete-btn")) {
+    const index = e.target.dataset.index;
+    entries.splice(index, 1);
+    renderEntries();
   }
 });
 
-// Initial render
+// Initialize
+setTodayDate();
 renderEntries();
-// Theme toggle
-const isDark = localStorage.getItem('theme') === 'dark';
-
-if (isDark) document.body.classList.add('dark');
-
-themeToggleBtn.textContent = isDark ? '☀️' : '🌙';
-
-themeToggleBtn.addEventListener('click', () => {
-  document.body.classList.toggle('dark');
-  const isNowDark = document.body.classList.contains('dark');
-  localStorage.setItem('theme', isNowDark ? 'dark' : 'light');
-  themeToggleBtn.textContent = isNowDark ? '☀️' : '🌙';
-});
-
