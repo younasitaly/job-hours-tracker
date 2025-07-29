@@ -1,143 +1,136 @@
-// Select elements
-const form = document.getElementById("entry-form");
-const dateInput = document.getElementById("date-input");
-const checkin1Input = document.getElementById("checkin1-input");
-const checkout1Input = document.getElementById("checkout1-input");
-const checkin2Input = document.getElementById("checkin2-input");
-const checkout2Input = document.getElementById("checkout2-input");
-const entriesTableBody = document.getElementById("entries-table-body");
-const monthlyTotalDisplay = document.getElementById("monthly-total");
+// Elements
+const form = document.getElementById('entry-form');
+const tbody = document.getElementById('entries-tbody');
 
-let entries = [];
+const dateInput = document.getElementById('date');
+const checkin1Input = document.getElementById('checkin1');
+const checkout1Input = document.getElementById('checkout1');
+const checkin2Input = document.getElementById('checkin2');
+const checkout2Input = document.getElementById('checkout2');
 
-// Initialize form date input to today
-function setTodayDate() {
-  const today = new Date().toISOString().slice(0, 10);
-  dateInput.value = today;
+let entries = JSON.parse(localStorage.getItem('jobEntries') || '[]');
+let editIndex = -1;
+
+// Utility: Format date as YYYY-MM-DD (input date format)
+function formatDateToInput(date) {
+  return date.toISOString().slice(0, 10);
 }
 
-// Calculate difference in minutes between two time strings "HH:MM"
-function timeDiffInMinutes(start, end) {
+// Utility: Calculate total hours between time strings (HH:mm)
+function diffTime(start, end) {
   if (!start || !end) return 0;
-  const [sh, sm] = start.split(":").map(Number);
-  const [eh, em] = end.split(":").map(Number);
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
   let startMinutes = sh * 60 + sm;
   let endMinutes = eh * 60 + em;
-  // Handle if end is before start (assume next day)
-  if (endMinutes < startMinutes) endMinutes += 24 * 60;
-  return Math.max(0, endMinutes - startMinutes);
+  let diff = endMinutes - startMinutes;
+  if(diff < 0) diff = 0; // no negative time
+  return diff;
 }
 
-// Format minutes to "Xh Ym"
-function formatMinutes(totalMinutes) {
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
+// Convert minutes to 'Xh Ym' string
+function minutesToHoursMins(mins) {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
   return `${h}h ${m}m`;
 }
 
-// Calculate total hours from two check-in/out pairs
+// Calculate total hours string for one entry
 function calculateTotalHours(entry) {
-  const session1 = timeDiffInMinutes(entry.checkin1, entry.checkout1);
-  const session2 = timeDiffInMinutes(entry.checkin2, entry.checkout2);
-  return session1 + session2;
+  const firstSession = diffTime(entry.checkin1, entry.checkout1);
+  const secondSession = diffTime(entry.checkin2, entry.checkout2);
+  return minutesToHoursMins(firstSession + secondSession);
 }
 
-// Render entries in the table
+// Render entries table rows
 function renderEntries() {
-  entriesTableBody.innerHTML = "";
-  entries.forEach((entry, index) => {
-    const totalMinutes = calculateTotalHours(entry);
-    const totalFormatted = formatMinutes(totalMinutes);
+  tbody.innerHTML = '';
 
-    const tr = document.createElement("tr");
+  entries.forEach((entry, index) => {
+    const tr = document.createElement('tr');
 
     tr.innerHTML = `
-      <td>${entry.date}</td>
-      <td>${entry.checkin1 || ""}</td>
-      <td>${entry.checkout1 || ""}</td>
-      <td>${entry.checkin2 || ""}</td>
-      <td>${entry.checkout2 || ""}</td>
-      <td>${totalFormatted}</td>
-      <td>
-        <button class="edit-btn" data-index="${index}">✏️</button>
-        <button class="delete-btn" data-index="${index}">🗑️</button>
+      <td data-label="Date">${entry.date}</td>
+      <td data-label="Check-in 1">${entry.checkin1 || '--:--'}</td>
+      <td data-label="Check-out 1">${entry.checkout1 || '--:--'}</td>
+      <td data-label="Check-in 2">${entry.checkin2 || '--:--'}</td>
+      <td data-label="Check-out 2">${entry.checkout2 || '--:--'}</td>
+      <td data-label="Total Hours">${calculateTotalHours(entry)}</td>
+      <td data-label="Actions">
+        <button class="edit-btn" onclick="editEntry(${index})" aria-label="Edit Entry">✏️</button>
+        <button class="delete-btn" onclick="deleteEntry(${index})" aria-label="Delete Entry">🗑️</button>
       </td>
     `;
 
-    entriesTableBody.appendChild(tr);
+    tbody.appendChild(tr);
   });
-
-  updateMonthlyTotal();
 }
 
-// Update the total hours for current month
-function updateMonthlyTotal() {
-  const thisMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
-  let totalMins = 0;
-
-  entries.forEach((entry) => {
-    if (entry.date.startsWith(thisMonth)) {
-      totalMins += calculateTotalHours(entry);
-    }
-  });
-
-  monthlyTotalDisplay.textContent = formatMinutes(totalMins);
-}
-
-// Clear form inputs (except date, keep it today)
-function clearForm() {
-  checkin1Input.value = "";
-  checkout1Input.value = "";
-  checkin2Input.value = "";
-  checkout2Input.value = "";
-}
-
-// Add new entry from form
-form.addEventListener("submit", (e) => {
+// Add or update entry from form data
+form.addEventListener('submit', e => {
   e.preventDefault();
-
-  // Validate required fields
-  if (!dateInput.value || !checkin1Input.value || !checkout1Input.value) {
-    alert("Please fill date, first check-in and check-out times.");
-    return;
-  }
 
   const newEntry = {
     date: dateInput.value,
     checkin1: checkin1Input.value,
     checkout1: checkout1Input.value,
-    checkin2: checkin2Input.value || "",
-    checkout2: checkout2Input.value || "",
+    checkin2: checkin2Input.value,
+    checkout2: checkout2Input.value,
   };
 
-  entries.push(newEntry);
+  // Simple validation: check-in < check-out
+  if (newEntry.checkin1 >= newEntry.checkout1) {
+    alert('Check-out 1 time must be after Check-in 1 time');
+    return;
+  }
+  if (newEntry.checkin2 && newEntry.checkout2 && newEntry.checkin2 >= newEntry.checkout2) {
+    alert('Check-out 2 time must be after Check-in 2 time');
+    return;
+  }
+
+  if (editIndex === -1) {
+    // Add new
+    entries.push(newEntry);
+  } else {
+    // Update existing
+    entries[editIndex] = newEntry;
+    editIndex = -1;
+  }
+
+  localStorage.setItem('jobEntries', JSON.stringify(entries));
   renderEntries();
-  clearForm();
+  form.reset();
+  setTodayDate();
+  form.querySelector('button[type="submit"]').textContent = 'Add Entry';
 });
 
-// Handle edit and delete clicks
-entriesTableBody.addEventListener("click", (e) => {
-  if (e.target.classList.contains("edit-btn")) {
-    const index = e.target.dataset.index;
-    const entry = entries[index];
-
-    // Fill form with existing entry data for editing
-    dateInput.value = entry.date;
-    checkin1Input.value = entry.checkin1;
-    checkout1Input.value = entry.checkout1;
-    checkin2Input.value = entry.checkin2;
-    checkout2Input.value = entry.checkout2;
-
-    // Remove the entry from array to update on submit
+// Delete entry
+function deleteEntry(index) {
+  if (confirm('Are you sure you want to delete this entry?')) {
     entries.splice(index, 1);
-    renderEntries();
-
-  } else if (e.target.classList.contains("delete-btn")) {
-    const index = e.target.dataset.index;
-    entries.splice(index, 1);
+    localStorage.setItem('jobEntries', JSON.stringify(entries));
     renderEntries();
   }
-});
+}
+
+// Edit entry
+function editEntry(index) {
+  const entry = entries[index];
+  dateInput.value = entry.date;
+  checkin1Input.value = entry.checkin1;
+  checkout1Input.value = entry.checkout1;
+  checkin2Input.value = entry.checkin2;
+  checkout2Input.value = entry.checkout2;
+
+  editIndex = index;
+  form.querySelector('button[type="submit"]').textContent = 'Update Entry';
+}
+
+// Set date input to today's date
+function setTodayDate() {
+  const today = new Date();
+  dateInput.value = formatDateToInput(today);
+}
 
 // Initialize
 setTodayDate();
