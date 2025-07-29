@@ -116,3 +116,17 @@ entriesTableBody.addEventListener('click', (e) => {
 
 // Initial render
 renderEntries();
+// Theme toggle
+const isDark = localStorage.getItem('theme') === 'dark';
+
+if (isDark) document.body.classList.add('dark');
+
+themeToggleBtn.textContent = isDark ? '☀️' : '🌙';
+
+themeToggleBtn.addEventListener('click', () => {
+  document.body.classList.toggle('dark');
+  const isNowDark = document.body.classList.contains('dark');
+  localStorage.setItem('theme', isNowDark ? 'dark' : 'light');
+  themeToggleBtn.textContent = isNowDark ? '☀️' : '🌙';
+});
+
