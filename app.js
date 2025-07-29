@@ -1,4 +1,3 @@
-// Firebase setup
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
@@ -13,97 +12,100 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const entriesRef = collection(db, "entries");
+const hoursCollection = collection(db, "hours");
 
-// Format date to dd/mm/yyyy
-function formatDate(dateStr) {
-  const [yyyy, mm, dd] = dateStr.split("-");
-  return `${dd}/${mm}/${yyyy}`;
+const form = document.getElementById("hoursForm");
+const tbody = document.querySelector("tbody");
+const dateInput = document.getElementById("date");
+const themeToggle = document.getElementById("theme-toggle");
+const monthlyTotalEl = document.getElementById("monthlyTotal");
+
+document.addEventListener("DOMContentLoaded", () => {
+  const today = new Date().toISOString().split("T")[0];
+  dateInput.value = today;
+  loadEntries();
+});
+
+themeToggle.addEventListener("click", () => {
+  document.body.classList.toggle("dark");
+});
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const newEntry = {
+    date: dateInput.value,
+    checkin1: form.checkin1.value,
+    checkout1: form.checkout1.value,
+    checkin2: form.checkin2.value,
+    checkout2: form.checkout2.value,
+  };
+
+  await addDoc(hoursCollection, newEntry);
+  form.reset();
+  dateInput.value = new Date().toISOString().split("T")[0];
+  loadEntries();
+});
+
+async function loadEntries() {
+  const snapshot = await getDocs(hoursCollection);
+  const entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+  tbody.innerHTML = "";
+  let monthlyMinutes = 0;
+
+  entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  entries.forEach(entry => {
+    const tr = document.createElement("tr");
+
+    const dailyMinutes = calculateDailyMinutes(entry);
+    monthlyMinutes += dailyMinutes;
+
+    tr.innerHTML = `
+      <td>${formatDate(entry.date)}</td>
+      <td>${entry.checkin1 || "--:--"}</td>
+      <td>${entry.checkout1 || "--:--"}</td>
+      <td>${entry.checkin2 || "--:--"}</td>
+      <td>${entry.checkout2 || "--:--"}</td>
+      <td>${formatMinutes(dailyMinutes)}</td>
+      <td>
+        <button onclick="deleteEntry('${entry.id}')">🗑️</button>
+      </td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+
+  monthlyTotalEl.textContent = formatMinutes(monthlyMinutes);
 }
 
-// Calculate total time from check-ins and outs
-function calculateTotalHours(ci1, co1, ci2, co2) {
-  const toMin = t => {
-    if (!t) return 0;
-    const [h, m] = t.split(":").map(Number);
-    return h * 60 + m;
-  };
-  const diff1 = toMin(co1) - toMin(ci1);
-  const diff2 = toMin(co2) - toMin(ci2);
-  const total = diff1 + diff2;
-  const h = Math.floor(total / 60);
-  const m = total % 60;
+function calculateDailyMinutes(entry) {
+  return (
+    calculateMinutes(entry.checkin1, entry.checkout1) +
+    calculateMinutes(entry.checkin2, entry.checkout2)
+  );
+}
+
+function calculateMinutes(start, end) {
+  if (!start || !end) return 0;
+  const [h1, m1] = start.split(":").map(Number);
+  const [h2, m2] = end.split(":").map(Number);
+  return (h2 * 60 + m2) - (h1 * 60 + m1);
+}
+
+function formatMinutes(mins) {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
   return `${h}h ${m}m`;
 }
 
-function renderEntry(docSnap, id) {
-  const { date, checkin1, checkout1, checkin2, checkout2 } = docSnap;
-  const tr = document.createElement("tr");
-
-  tr.innerHTML = `
-    <td>${formatDate(date)}</td>
-    <td>${checkin1 || ""}</td>
-    <td>${checkout1 || ""}</td>
-    <td>${checkin2 || ""}</td>
-    <td>${checkout2 || ""}</td>
-    <td>${calculateTotalHours(checkin1, checkout1, checkin2, checkout2)}</td>
-    <td>
-      <button onclick="deleteEntry('${id}')">🗑️</button>
-    </td>
-  `;
-
-  document.querySelector("tbody").appendChild(tr);
+function formatDate(dateStr) {
+  const [y, m, d] = dateStr.split("-");
+  return `${d}/${m}/${y}`;
 }
-
-async function loadEntries() {
-  document.querySelector("tbody").innerHTML = "";
-  const snapshot = await getDocs(entriesRef);
-  snapshot.forEach(doc => {
-    renderEntry(doc.data(), doc.id);
-  });
-}
-
-document.getElementById("hoursForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const date = document.getElementById("date").value;
-  const checkin1 = document.getElementById("checkin1").value;
-  const checkout1 = document.getElementById("checkout1").value;
-  const checkin2 = document.getElementById("checkin2").value;
-  const checkout2 = document.getElementById("checkout2").value;
-
-  await addDoc(entriesRef, {
-    date,
-    checkin1,
-    checkout1,
-    checkin2,
-    checkout2
-  });
-
-  await loadEntries();
-  e.target.reset();
-  document.getElementById("date").valueAsDate = new Date();
-});
 
 window.deleteEntry = async (id) => {
-  await deleteDoc(doc(entriesRef, id));
+  await deleteDoc(doc(hoursCollection, id));
   loadEntries();
 };
-
-// Set today's date on load
-document.getElementById("date").valueAsDate = new Date();
-loadEntries();
-
-// Dark mode toggle
-const toggleBtn = document.getElementById("theme-toggle");
-
-function applyTheme(theme) {
-  document.body.classList.toggle("dark", theme === "dark");
-  localStorage.setItem("theme", theme);
-}
-
-toggleBtn.addEventListener("click", () => {
-  const newTheme = document.body.classList.contains("dark") ? "light" : "dark";
-  applyTheme(newTheme);
-});
-
-applyTheme(localStorage.getItem("theme") || "light");
