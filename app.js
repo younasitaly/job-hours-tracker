@@ -1,141 +1,99 @@
-// Elements
-const form = document.getElementById('entry-form');
-const tbody = document.getElementById('entries-tbody');
+// Firebase setup
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-const dateInput = document.getElementById('date');
-const checkin1Input = document.getElementById('checkin1');
-const checkout1Input = document.getElementById('checkout1');
-const checkin2Input = document.getElementById('checkin2');
-const checkout2Input = document.getElementById('checkout2');
+const firebaseConfig = {
+  apiKey: "AIzaSyDwlEQZJmI3AEDJWCRtpKgBXBr1qD-4-Ow",
+  authDomain: "jobhourstracker.firebaseapp.com",
+  projectId: "jobhourstracker",
+  storageBucket: "jobhourstracker.firebasestorage.app",
+  messagingSenderId: "401383939095",
+  appId: "1:401383939095:web:e5e5c056a12fc47fd99052"
+};
 
-let entries = JSON.parse(localStorage.getItem('jobEntries') || '[]');
-let editIndex = -1;
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const entriesRef = collection(db, "entries");
 
-// Utility: Format date as YYYY-MM-DD (input date format)
-function formatDateToInput(date) {
-  return date.toISOString().slice(0, 10);
+// Format date to dd/mm/yyyy
+function formatDate(dateStr) {
+  const [yyyy, mm, dd] = dateStr.split("-");
+  return `${dd}/${mm}/${yyyy}`;
 }
 
-// Utility: Calculate total hours between time strings (HH:mm)
-function diffTime(start, end) {
-  if (!start || !end) return 0;
-  const [sh, sm] = start.split(':').map(Number);
-  const [eh, em] = end.split(':').map(Number);
-  let startMinutes = sh * 60 + sm;
-  let endMinutes = eh * 60 + em;
-  let diff = endMinutes - startMinutes;
-  if(diff < 0) diff = 0; // no negative time
-  return diff;
-}
-
-// Convert minutes to 'Xh Ym' string
-function minutesToHoursMins(mins) {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
+// Calculate total time from check-ins and outs
+function calculateTotalHours(ci1, co1, ci2, co2) {
+  const toMin = t => {
+    if (!t) return 0;
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+  const diff1 = toMin(co1) - toMin(ci1);
+  const diff2 = toMin(co2) - toMin(ci2);
+  const total = diff1 + diff2;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
   return `${h}h ${m}m`;
 }
 
-// Calculate total hours string for one entry
-function calculateTotalHours(entry) {
-  const firstSession = diffTime(entry.checkin1, entry.checkout1);
-  const secondSession = diffTime(entry.checkin2, entry.checkout2);
-  return minutesToHoursMins(firstSession + secondSession);
+function renderEntry(docSnap, id) {
+  const { date, checkin1, checkout1, checkin2, checkout2 } = docSnap;
+  const tr = document.createElement("tr");
+
+  tr.innerHTML = `
+    <td>${formatDate(date)}</td>
+    <td>${checkin1 || ""}</td>
+    <td>${checkout1 || ""}</td>
+    <td>${checkin2 || ""}</td>
+    <td>${checkout2 || ""}</td>
+    <td>${calculateTotalHours(checkin1, checkout1, checkin2, checkout2)}</td>
+    <td>
+      <button onclick="deleteEntry('${id}')">🗑️</button>
+    </td>
+  `;
+
+  document.querySelector("tbody").appendChild(tr);
 }
 
-// Render entries table rows
-function renderEntries() {
-  tbody.innerHTML = '';
-
-  entries.forEach((entry, index) => {
-    const tr = document.createElement('tr');
-
-    tr.innerHTML = `
-      <td data-label="Date">${entry.date}</td>
-      <td data-label="Check-in 1">${entry.checkin1 || '--:--'}</td>
-      <td data-label="Check-out 1">${entry.checkout1 || '--:--'}</td>
-      <td data-label="Check-in 2">${entry.checkin2 || '--:--'}</td>
-      <td data-label="Check-out 2">${entry.checkout2 || '--:--'}</td>
-      <td data-label="Total Hours">${calculateTotalHours(entry)}</td>
-      <td data-label="Actions">
-        <button class="edit-btn" onclick="editEntry(${index})" aria-label="Edit Entry">✏️</button>
-        <button class="delete-btn" onclick="deleteEntry(${index})" aria-label="Delete Entry">🗑️</button>
-      </td>
-    `;
-
-    tbody.appendChild(tr);
+async function loadEntries() {
+  document.querySelector("tbody").innerHTML = "";
+  const snapshot = await getDocs(entriesRef);
+  snapshot.forEach(doc => {
+    renderEntry(doc.data(), doc.id);
   });
 }
 
-// Add or update entry from form data
-form.addEventListener('submit', e => {
+document.getElementById("hoursForm").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const date = document.getElementById("date").value;
+  const checkin1 = document.getElementById("checkin1").value;
+  const checkout1 = document.getElementById("checkout1").value;
+  const checkin2 = document.getElementById("checkin2").value;
+  const checkout2 = document.getElementById("checkout2").value;
 
-  const newEntry = {
-    date: dateInput.value,
-    checkin1: checkin1Input.value,
-    checkout1: checkout1Input.value,
-    checkin2: checkin2Input.value,
-    checkout2: checkout2Input.value,
-  };
+  await addDoc(entriesRef, {
+    date,
+    checkin1,
+    checkout1,
+    checkin2,
+    checkout2
+  });
 
-  // Simple validation: check-in < check-out
-  if (newEntry.checkin1 >= newEntry.checkout1) {
-    alert('Check-out 1 time must be after Check-in 1 time');
-    return;
-  }
-  if (newEntry.checkin2 && newEntry.checkout2 && newEntry.checkin2 >= newEntry.checkout2) {
-    alert('Check-out 2 time must be after Check-in 2 time');
-    return;
-  }
-
-  if (editIndex === -1) {
-    // Add new
-    entries.push(newEntry);
-  } else {
-    // Update existing
-    entries[editIndex] = newEntry;
-    editIndex = -1;
-  }
-
-  localStorage.setItem('jobEntries', JSON.stringify(entries));
-  renderEntries();
-  form.reset();
-  setTodayDate();
-  form.querySelector('button[type="submit"]').textContent = 'Add Entry';
+  await loadEntries();
+  e.target.reset();
+  document.getElementById("date").valueAsDate = new Date();
 });
 
-// Delete entry
-function deleteEntry(index) {
-  if (confirm('Are you sure you want to delete this entry?')) {
-    entries.splice(index, 1);
-    localStorage.setItem('jobEntries', JSON.stringify(entries));
-    renderEntries();
-  }
-}
+window.deleteEntry = async (id) => {
+  await deleteDoc(doc(entriesRef, id));
+  loadEntries();
+};
 
-// Edit entry
-function editEntry(index) {
-  const entry = entries[index];
-  dateInput.value = entry.date;
-  checkin1Input.value = entry.checkin1;
-  checkout1Input.value = entry.checkout1;
-  checkin2Input.value = entry.checkin2;
-  checkout2Input.value = entry.checkout2;
+// Set today's date on load
+document.getElementById("date").valueAsDate = new Date();
+loadEntries();
 
-  editIndex = index;
-  form.querySelector('button[type="submit"]').textContent = 'Update Entry';
-}
-
-// Set date input to today's date
-function setTodayDate() {
-  const today = new Date();
-  dateInput.value = formatDateToInput(today);
-}
-
-// Initialize
-setTodayDate();
-renderEntries();
-// DARK MODE TOGGLE
+// Dark mode toggle
 const toggleBtn = document.getElementById("theme-toggle");
 
 function applyTheme(theme) {
@@ -144,11 +102,8 @@ function applyTheme(theme) {
 }
 
 toggleBtn.addEventListener("click", () => {
-  const currentTheme = document.body.classList.contains("dark") ? "dark" : "light";
-  const newTheme = currentTheme === "dark" ? "light" : "dark";
+  const newTheme = document.body.classList.contains("dark") ? "light" : "dark";
   applyTheme(newTheme);
 });
 
-// Load saved theme
-const savedTheme = localStorage.getItem("theme") || "light";
-applyTheme(savedTheme);
+applyTheme(localStorage.getItem("theme") || "light");
